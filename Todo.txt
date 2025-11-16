@@ -1,0 +1,4 @@
+-Logarithmix scale
+-Info Panel
+-Prettier Ui
+-better sync with timing
