@@ -267,9 +267,11 @@ class frequency_visualizer:
 
         self.redraw_thread = None
 
-        self.sync = False
+        self.sync = True
 
         self.info_panel_tags = {}
+
+        self.tick = 0
     
     def update_item_text(self,item_id,text):
         dpg.configure_item(item_id,default_value=text)
@@ -377,7 +379,6 @@ class frequency_visualizer:
         return [255-color[0],255-color[1],255-color[2]]
     
     def redraw(self,canvas,visu_size,margin):
-        tick = 0
         delay = 1
         fix = 1      
         col_n = [87, 96, 150]
@@ -408,43 +409,28 @@ class frequency_visualizer:
 
         while True:
             if dpg.is_dearpygui_running():
-                rect_x0 = 0+margin*2.5                  
+
+                rect_x0 = 0+margin*2.5
+
+                #redraw-step : Clear
                 dpg.delete_item(item=canvas,children_only=True)
                 dpg.draw_rectangle((0,0),(bg_size_w,bg_size_h),fill=background_col,color=background_col,parent=canvas)
-                for i in range(0,amount):   
-                    if tick >= self.maxTicking.maxTick:
-                        tick = 0
+
+                for i in range(0,amount):
+
+                    if self.tick >= self.maxTicking.maxTick:
+                        self.tick = 0
                         if self.music_running:
                             self.update_music_bool(False)
-                    if self.music_running and self.generated_fourier:
-                        
-                        if not self.sync:
-                            tick = 0
-                            tick += int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow) + fix
-                            self.sync = True
-                        
-                        val = self.generated_fourier.hz_ranges[tick][i]* vol_prct
-                        maximum = self.magnitude
-                        if not self.logarithmic_scale:
-                            percentage = val/maximum
-                        else:
-                            percentage = self.logarithmic(val,maximum)
 
-                        overFlow = 0
-                        if percentage > 1.0:
-                            overFlow = percentage-1.0
-                            overFlow /= 2
-                            percentage = 1.0
-                        elif percentage < 0.02:
-                            percentage = 0.002
+                    if self.music_running and self.generated_fourier:
+
+                        self.sync_tick_to_music(fix)
                         
-                        dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*percentage),fill=col_n,color=col_n,parent=canvas)
-                        if overFlow > 0:
-                            dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*overFlow),fill=col_over,color=col_over,parent=canvas)
+                        self.draw_bars_rect(canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over)         
+
                     else:
-                        tick = 0
-                        if self.sync:
-                            self.sync = False
+                        self.tick = 0
                     
                     txt = txt_values[i]
                     tlen = len(txt)
@@ -463,7 +449,7 @@ class frequency_visualizer:
                     sleep = 1
                 time.sleep(sleep)
 
-                if(tick %2 == 0):
+                if(self.tick %2 == 0):
                     self.update_volume()
                                     
                     if self.scale_to_volume:
@@ -471,16 +457,34 @@ class frequency_visualizer:
                     else:
                         vol_prct = 1.0
 
-                if(tick %6 == 0 and self.sync):
-                    self.sync = False
-
-                tick+=delay
+                self.tick+=delay
             else:
                 time.sleep(1)
     
-    def draw_bars_rect(self,parent):
-        #TODO
-        pass
+    def draw_bars_rect(self,canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over):    
+        val = self.generated_fourier.hz_ranges[self.tick][i]* vol_prct
+        maximum = self.magnitude
+        if not self.logarithmic_scale:
+            percentage = val/maximum
+        else:
+            percentage = self.logarithmic(val,maximum)
+
+        overFlow = 0
+        if percentage > 1.0:
+            overFlow = percentage-1.0
+            overFlow /= 2
+            percentage = 1.0
+        elif percentage < 0.02:
+            percentage = 0.002
+        
+        dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*percentage),fill=col_n,color=col_n,parent=canvas)
+        if overFlow > 0:
+            dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*overFlow),fill=col_over,color=col_over,parent=canvas)
+    
+    def sync_tick_to_music(self,fix):
+        if(self.tick %6 == 0 and self.sync):
+            self.tick = 0
+            self.tick += int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow) + fix
 
 
 freq = frequency_visualizer()
