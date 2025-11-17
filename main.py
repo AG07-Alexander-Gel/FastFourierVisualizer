@@ -469,7 +469,7 @@ class frequency_visualizer:
                     
                 self.tick+=step
             else:
-                time.sleep(1)
+                time.sleep(0.5)
     
     def draw_bars_rect(self,canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over):
 
