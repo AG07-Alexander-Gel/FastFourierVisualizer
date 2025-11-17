@@ -2,7 +2,7 @@ import mp3
 import pygame.mixer as pgm
 import dearpygui.dearpygui as dpg
 from tkinter import filedialog
-from win32api import GetSystemMetrics
+from screeninfo import get_monitors
 from enum import Enum
 import numpy as np
 import math
@@ -21,12 +21,12 @@ def form_string(txt: str):
 
     return new_txt[::-1].replace(".mp3","")
 
-class ui_button_tags(Enum):
+class UiButtonTags(Enum):
     RUN = 100
     STOP = 101
     SELECT = 102
 
-class FINAL_hzText(Enum):
+class FINALhzText(Enum):
     Bass = "150"          #   (0          ,   281.25)
     Low = "450"           #   (328.125    ,   515.625)
     Mid = "1500"          #   (562.5      ,   2015.625)
@@ -36,7 +36,7 @@ class FINAL_hzText(Enum):
     Treble = "15000"      #   (13046.875  ,   20015.625)
     HighP = "20000+"      #   (20062.5    ,   24000.0)     
 
-class FINAL_hzRanges(Enum):
+class FINALhzRanges(Enum):
     Bass = 281.25 
     Low = 515.625
     Mid = 2015.625
@@ -47,32 +47,32 @@ class FINAL_hzRanges(Enum):
     HighP = 24000.0  
 
 
-class ticking:
+class Ticking:
 
     def __init__(self):
         self.maxTick = 1000000000
 
-    def changeTick(self,val : int):
+    def change_tick(self, val : int):
         self.maxTick = val
         
-class myFourier:
+class MyFourier:
 
-    def __init__(self,decoder,samplesWindowSize=1024):
-        def toMono(buf):
-            return ((np.frombuffer(buf, np.int16).reshape(-1,2).sum(axis=1)//2).astype(np.int16))
+    def __init__(self, decoder, samples_window_size=1024):
+        def to_mono(buf):
+            return (np.frombuffer(buf, np.int16).reshape(-1, 2).sum(axis=1) // 2).astype(np.int16)
         
         self.SampleRate = decoder.get_sample_rate()
 
-        self.TWindow = samplesWindowSize/self.SampleRate
+        self.TWindow = samples_window_size / self.SampleRate
 
-        self.binSize = self.SampleRate/samplesWindowSize
-        self.binAmount = samplesWindowSize/2
+        self.binSize = self.SampleRate / samples_window_size
+        self.binAmount = samples_window_size / 2
         self.MaxFreq = self.SampleRate/2
 
         stereo_pcm = decoder.read()
-        self.mono_pcm = toMono(stereo_pcm)
+        self.mono_pcm = to_mono(stereo_pcm)
 
-        self.samplesSize = samplesWindowSize
+        self.samplesSize = samples_window_size
 
         self.current = 0
         self.max = math.floor(len(self.mono_pcm)/self.samplesSize)        
@@ -94,7 +94,7 @@ class myFourier:
             kv = 0
             for b in range(0,self.neoquist):
                 
-                if(b*self.binSize <= values[kv]):
+                if b*self.binSize <= values[kv]:
                     hz += int(spec[b])
                 else:
                     hzb[kv] = hz
@@ -109,9 +109,9 @@ class myFourier:
         while self.current < self.max:
             values = self.mono_pcm[(self.current*self.samplesSize) : ((self.current+1)*self.samplesSize)]
             hamming = np.hamming(self.samplesSize)
-            valuesToWindow = values * hamming
+            values_to_window = values * hamming
 
-            spectral_values = np.fft.fft(valuesToWindow)
+            spectral_values = np.fft.fft(values_to_window)
         
             self.bin_values[self.current] = abs(spectral_values[:self.neoquist])
             self.current += 1
@@ -120,14 +120,15 @@ class myFourier:
         return self.gen_hz_ranges(order=order)
             
         
-    def printInfo(self):
+    def print_info(self):
         print(f"TimeWindow: {str(self.TWindow*1000)[0:5]}ms ; Bin Size: {self.binSize} Hz ; Bin Amount: {self.binAmount} ; MaxFrequencyToCheck: {self.MaxFreq} Hz")
 
-class frequency_visualizer:
+class FrequencyVisualizer:
 
     def select_file(self, sender, value, user_data):
-        new_file = filedialog.askopenfilename(title="Select mp3")
-        if ".mp3" in new_file:            
+        new_file = filedialog.askopenfilename()
+
+        if ".mp3" in str(new_file):
             self.file_selected = True
 
             dpg.set_value(user_data,"Loading...")
@@ -156,11 +157,11 @@ class frequency_visualizer:
         
         self.decoder_ = mp3.Decoder(self.original_file)
 
-        self.generated_fourier = myFourier(self.decoder_,self.sampleSize)
+        self.generated_fourier = MyFourier(self.decoder_, self.sampleSize)
 
         self.magnitude = self.generated_fourier.gen(self.hertz_bins) * self.magnitude_scale
 
-        self.maxTicking.changeTick(self.generated_fourier.max)
+        self.maxTicking.change_tick(self.generated_fourier.max)
     
     def init_music(self):
         self.music_lib.init()
@@ -174,7 +175,7 @@ class frequency_visualizer:
     
     def update_volume(self):
         if self.is_playing() and self.volume != self.music_lib.music.get_volume():            
-            self.music_lib.music.set_volume((self.volume)/100)
+            self.music_lib.music.set_volume(self.volume / 100)
 
     def set_music_vol(self,sender,value,user_data):
         if value:
@@ -206,8 +207,16 @@ class frequency_visualizer:
     def get_music_pos_ms(self):
         if self.is_playing():
             return self.music_lib.music.get_pos()
+        else:
+            return 1
+
+    @staticmethod
+    def get_screen_dimensions():
+        m1 = get_monitors()[0]
+        return m1.width,m1.height
 
     def __init__(self):
+        self.running = False
         self.music_init = False
         self.music_running = False
         self.music_lib = pgm
@@ -222,7 +231,7 @@ class frequency_visualizer:
 
         self.generated_fourier = None
         
-        self.maxTicking = ticking()
+        self.maxTicking = Ticking()
 
         self.magnitude = 0
         self.magnitude_scale = 0.4
@@ -231,16 +240,15 @@ class frequency_visualizer:
         self.scale_to_volume = True
         
         self.hertz_bins = {}
-        for member in FINAL_hzRanges:
+        for member in FINALhzRanges:
             self.hertz_bins[str(member.name)] = member.value
 
-        self.screen_w = GetSystemMetrics(0)
-        self.screen_h = GetSystemMetrics(1)
+        self.screen_w, self.screen_h = self.get_screen_dimensions()
 
         self.window_w = int(self.screen_w * 0.5)
         self.window_h = int(self.screen_h * 0.5)
 
-        self.visu_pos = 0.15
+        self.visu_pos = 0.2
 
         self.main_win_tag = 1
         self.visualizer_win_tag = 2
@@ -260,8 +268,7 @@ class frequency_visualizer:
     def update_info_panel(self,n_hz = None, n_samples = None,n_milis = None):
         if not n_samples:
             n_samples = self.sampleSize
-        else:
-            dpg.configure_item(self.info_panel_tags["samples"],default_value=f"  {n_samples}"[:6])
+        dpg.configure_item(self.info_panel_tags["samples"],default_value=f"  {n_samples}"[:6])
 
         if n_hz:
             dpg.configure_item(self.info_panel_tags["hz"],default_value=f"{n_hz}"[:6])
@@ -271,9 +278,9 @@ class frequency_visualizer:
 
     def info_panel(self):
         x0 = int(self.window_w/10*6)
-        x1 = int(self.window_w/10*7.4)
+        x1 = int(self.window_w/10*8.4)
         y0 = 0
-        y1 = int(self.window_h/6.7)
+        y1 = int(self.window_h*self.visu_pos)
 
         size = [x1-x0,y1-y0]
 
@@ -284,10 +291,10 @@ class frequency_visualizer:
         self.info_panel_tags["ms"] = dpg.add_text("   0.0",label="ms",show_label=True,parent=info_panel)
     
     def canvas_panel(self):        
-        margin = 30
+        margin = int(self.window_h/35)
         visu_size = [self.window_w,int(self.window_h-(self.window_h*self.visu_pos))]
 
-        visualizer = dpg.add_window(label="Visualizer",tag=self.visualizer_win_tag,pos=[0,self.window_h*self.visu_pos],min_size=visu_size,max_size=visu_size,no_move=True,no_title_bar=True,no_resize=True,no_scroll_with_mouse=True,no_scrollbar=True)
+        visualizer = dpg.add_window(label="Visualizer",tag=self.visualizer_win_tag,pos=[0,int(self.window_h*self.visu_pos)],min_size=visu_size,max_size=visu_size,no_move=True,no_title_bar=True,no_resize=True,no_scroll_with_mouse=True,no_scrollbar=True)
         canvas = dpg.add_drawlist(width=visu_size[0],height=visu_size[1],pos=[0,0],parent=visualizer)
         self.redraw_thread = threading.Thread(target=self.redraw,daemon=True,args=[canvas,visu_size,margin])
         self.redraw_thread.start()
@@ -299,17 +306,17 @@ class frequency_visualizer:
             self.ui_label_widgets.select = dpg.add_text(form_string(self.filepath))
             dpg.add_button(label="Select",
                            user_data=self.ui_label_widgets.select,
-                           tag=ui_button_tags.SELECT.value,
-                        callback=self.select_file)
+                           tag=UiButtonTags.SELECT.value,
+                           callback=self.select_file)
             
-            dpg.add_button(label="Play",tag=ui_button_tags.RUN.value,
-                        callback=self.run_music)
+            dpg.add_button(label="Play", tag=UiButtonTags.RUN.value,
+                           callback=self.run_music)
 
-            dpg.add_button(label="Stop",tag=ui_button_tags.STOP.value,
-                        callback=self.stop_music)
+            dpg.add_button(label="Stop", tag=UiButtonTags.STOP.value,
+                           callback=self.stop_music)
             
-            slider_w = self.window_w/8
-            dpg.add_slider_int(min_value=1,max_value=100,pos=(self.window_w/10*1,30),label="Volume",width=slider_w,default_value=50,callback=self.set_music_vol,clamped=True,tracked=True)
+            slider_w = int(self.window_w/8)
+            dpg.add_slider_int(min_value=1,max_value=100,pos=(int(self.window_w/10*1),30),label="Volume",width=slider_w,default_value=50,callback=self.set_music_vol,clamped=True,tracked=True)
 
 
         self.info_panel()      
@@ -321,16 +328,17 @@ class frequency_visualizer:
         dpg.setup_dearpygui()
         dpg.show_viewport()
         dpg.set_primary_window(self.main_win_tag, True)
-    
-    def render_loop(self):
-        dpg.start_dearpygui()
-    
+
     def start(self):
         self.init_gui()
 
         self.render_loop()
 
         self.stop_music()
+
+    def render_loop(self):
+        self.running = True
+        dpg.start_dearpygui()
 
     def stop(self):
         dpg.stop_dearpygui()
@@ -359,10 +367,10 @@ class frequency_visualizer:
         ratio_spacing = 0.25
         y_margin = 0.05
 
-        txt_values = [v.value for v in FINAL_hzText]
+        txt_values = [v.value for v in FINALhzText]
 
         bg_size_w = visu_size[0]-margin
-        bg_size_h = visu_size[1]-margin*1.75  
+        bg_size_h = visu_size[1]-margin
 
         amount = len(self.hertz_bins.keys())
 
@@ -380,7 +388,7 @@ class frequency_visualizer:
             if dpg.is_dearpygui_running():
                 while dpg.is_dearpygui_running():
 
-                    rect_x0 = 0+margin*2.5                  
+                    rect_x0 = 0+margin
                     dpg.delete_item(item=canvas,children_only=True)
                     dpg.draw_rectangle((0,0),(bg_size_w,bg_size_h),fill=background_col,color=background_col,parent=canvas)
                     for i in range(0,amount):   
@@ -394,8 +402,8 @@ class frequency_visualizer:
                                 tick = 0
                                 tick += int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow) + fix
                                 self.sync = True
-                            prctn = (((self.generated_fourier.hz_ranges[tick][i])* vol_prct/(self.magnitude)))% 1.0
-                            if (prctn > 0):
+                            prctn = ((self.generated_fourier.hz_ranges[tick][i]) * vol_prct / self.magnitude) % 1.0
+                            if prctn > 0:
                                 dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-y_max*prctn),fill=col,color=col,parent=canvas)
                         else:
                             tick = 0
@@ -411,15 +419,15 @@ class frequency_visualizer:
 
                     dpg.draw_line([0,rect_y0+2.5],[bg_size_w,rect_y0+2.5],color=text_col,thickness=1,parent=canvas)
                     dpg.draw_line([0,rect_y0-y_max-2.5],[bg_size_w,rect_y0-y_max-2.5],color=text_col,thickness=1,parent=canvas)
-                    dpg.draw_text((bg_size_w-margin,rect_y0+6),text="Hz",parent=canvas,color=text_col,size=text_size)
+                    dpg.draw_text((bg_size_w-margin*2,rect_y0+6),text="Hz",parent=canvas,color=text_col,size=text_size)
                     
-                    if(self.generated_fourier):
+                    if self.generated_fourier:
                         sleep = (self.generated_fourier.TWindow*float(delay))
                     else:
                         sleep = 1
                     time.sleep(sleep)
 
-                    if(tick %2 == 0):
+                    if tick %2 == 0:
                         self.update_volume()
                                         
                         if self.scale_to_volume:
@@ -431,6 +439,6 @@ class frequency_visualizer:
             else:
                 time.sleep(1)
 
-freq = frequency_visualizer()
+freq = FrequencyVisualizer()
 freq.start()
 freq.stop()
