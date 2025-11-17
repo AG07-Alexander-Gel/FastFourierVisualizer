@@ -184,6 +184,14 @@ class frequency_visualizer:
         if self.music_init:
             return self.music_lib.music.get_busy()
         return False
+
+    def update_music_bool(self,nBool):
+        self.music_running = nBool
+        if nBool:
+            self.update_item_text(self.ui_label_widgets.isPlaying,"Playing...")
+        else:
+            self.update_item_text(self.ui_label_widgets.isPlaying,"Not Playing")
+
         
     def run_music(self):
         if not self.music_init:
@@ -191,13 +199,13 @@ class frequency_visualizer:
 
         if self.music_init:
             if not pgm.music.get_busy():
-                pgm.music.play()                
-                self.music_running = True
+                pgm.music.play()           
+                self.update_music_bool(True)
 
     def stop_music(self):
         if self.is_playing():
             self.music_lib.music.stop()
-            self.music_running = False
+            self.update_music_bool(False)
     
     def pause_music(self):
         if self.is_playing():
@@ -240,7 +248,7 @@ class frequency_visualizer:
         self.window_w = int(self.screen_w * 0.5)
         self.window_h = int(self.screen_h * 0.5)
 
-        self.visu_pos = 0.15
+        self.visu_pos = 0.2
 
         self.main_win_tag = 1
         self.visualizer_win_tag = 2
@@ -248,6 +256,7 @@ class frequency_visualizer:
 
         class _ui_label_widgets:
             select = None
+            isPlaying = None
 
         self.ui_label_widgets = _ui_label_widgets()
 
@@ -257,17 +266,20 @@ class frequency_visualizer:
 
         self.info_panel_tags = {}
     
+    def update_item_text(self,item_id,text):
+        dpg.configure_item(item_id,default_value=text)
+    
     def update_info_panel(self,n_hz = None, n_samples = None,n_milis = None):
         if not n_samples:
             n_samples = self.sampleSize
         else:
-            dpg.configure_item(self.info_panel_tags["samples"],default_value=f"  {n_samples}"[:6])
+            self.update_item_text(self.info_panel_tags["samples"],f"  {n_samples}"[:6])
 
         if n_hz:
-            dpg.configure_item(self.info_panel_tags["hz"],default_value=f"{n_hz}"[:6])
+            self.update_item_text(self.info_panel_tags["hz"],f"{n_hz}"[:6])
 
         if n_milis:
-            dpg.configure_item(self.info_panel_tags["ms"],default_value=f"  {n_milis*1000}"[0:6])
+            self.update_item_text(self.info_panel_tags["ms"],f"  {n_milis*1000}"[0:6])
 
     def info_panel(self):
         x0 = int(self.window_w/10*6)
@@ -310,6 +322,8 @@ class frequency_visualizer:
             
             slider_w = self.window_w/8
             dpg.add_slider_int(min_value=1,max_value=100,pos=(self.window_w/10*1,30),label="Volume",width=slider_w,default_value=50,callback=self.set_music_vol,clamped=True,tracked=True)
+
+            self.ui_label_widgets.isPlaying = dpg.add_text("Not Playing",pos=(self.window_w/10*1,55))
 
 
         self.info_panel()      
@@ -378,56 +392,54 @@ class frequency_visualizer:
 
         while True:
             if dpg.is_dearpygui_running():
-                while dpg.is_dearpygui_running():
-
-                    rect_x0 = 0+margin*2.5                  
-                    dpg.delete_item(item=canvas,children_only=True)
-                    dpg.draw_rectangle((0,0),(bg_size_w,bg_size_h),fill=background_col,color=background_col,parent=canvas)
-                    for i in range(0,amount):   
-                        if tick >= self.maxTicking.maxTick:
-                            tick = 0
-                            if self.music_running:
-                                self.music_running = False
-                        if self.music_running and self.generated_fourier:
-                            
-                            if not self.sync:
-                                tick = 0
-                                tick += int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow) + fix
-                                self.sync = True
-                            prctn = (((self.generated_fourier.hz_ranges[tick][i])* vol_prct/(self.magnitude)))% 1.0
-                            if (prctn > 0):
-                                dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-y_max*prctn),fill=col,color=col,parent=canvas)
-                        else:
-                            tick = 0
-                            if self.sync:
-                                self.sync = False
+                rect_x0 = 0+margin*2.5                  
+                dpg.delete_item(item=canvas,children_only=True)
+                dpg.draw_rectangle((0,0),(bg_size_w,bg_size_h),fill=background_col,color=background_col,parent=canvas)
+                for i in range(0,amount):   
+                    if tick >= self.maxTicking.maxTick:
+                        tick = 0
+                        if self.music_running:
+                            self.update_music_bool(False)
+                    if self.music_running and self.generated_fourier:
                         
-                        txt = txt_values[i]
-                        tlen = len(txt)
-
-                        dpg.draw_text((rect_x0+(0.5-(0.1*tlen))*rect_size_w,rect_y0+6),text=txt,color=text_col,size=text_size,parent=canvas)
-                        rect_x0 += spacing
-                        rect_x0 += rect_size_w
-
-                    dpg.draw_line([0,rect_y0+2.5],[bg_size_w,rect_y0+2.5],color=text_col,thickness=1,parent=canvas)
-                    dpg.draw_line([0,rect_y0-y_max-2.5],[bg_size_w,rect_y0-y_max-2.5],color=text_col,thickness=1,parent=canvas)
-                    dpg.draw_text((bg_size_w-margin,rect_y0+6),text="Hz",parent=canvas,color=text_col,size=text_size)
-                    
-                    if(self.generated_fourier):
-                        sleep = (self.generated_fourier.TWindow*float(delay))
+                        if not self.sync:
+                            tick = 0
+                            tick += int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow) + fix
+                            self.sync = True
+                        prctn = (((self.generated_fourier.hz_ranges[tick][i])* vol_prct/(self.magnitude)))% 1.0
+                        if (prctn > 0):
+                            dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-y_max*prctn),fill=col,color=col,parent=canvas)
                     else:
-                        sleep = 1
-                    time.sleep(sleep)
+                        tick = 0
+                        if self.sync:
+                            self.sync = False
+                    
+                    txt = txt_values[i]
+                    tlen = len(txt)
 
-                    if(tick %2 == 0):
-                        self.update_volume()
-                                        
-                        if self.scale_to_volume:
-                            vol_prct = ((self.volume*2)/100)
-                        else:
-                            vol_prct = 1   
+                    dpg.draw_text((rect_x0+(0.5-(0.1*tlen))*rect_size_w,rect_y0+6),text=txt,color=text_col,size=text_size,parent=canvas)
+                    rect_x0 += spacing
+                    rect_x0 += rect_size_w
 
-                    tick+=delay
+                dpg.draw_line([0,rect_y0+2.5],[bg_size_w,rect_y0+2.5],color=text_col,thickness=1,parent=canvas)
+                dpg.draw_line([0,rect_y0-y_max-2.5],[bg_size_w,rect_y0-y_max-2.5],color=text_col,thickness=1,parent=canvas)
+                dpg.draw_text((bg_size_w-margin,rect_y0+6),text="Hz",parent=canvas,color=text_col,size=text_size)
+                
+                if(self.generated_fourier):
+                    sleep = (self.generated_fourier.TWindow*float(delay))
+                else:
+                    sleep = 1
+                time.sleep(sleep)
+
+                if(tick %2 == 0):
+                    self.update_volume()
+                                    
+                    if self.scale_to_volume:
+                        vol_prct = ((self.volume*2)/100)
+                    else:
+                        vol_prct = 1   
+
+                tick+=delay
             else:
                 time.sleep(1)
 
