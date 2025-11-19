@@ -125,6 +125,9 @@ class myFourier:
 
 class frequency_visualizer:
 
+    def debugging_(self):
+        self.is_playing()
+
     def select_file(self, sender, value, user_data):
         new_file = filedialog.askopenfilename(title="Select mp3")
         if ".mp3" in new_file:            
@@ -156,15 +159,21 @@ class frequency_visualizer:
         
         self.decoder_ = mp3.Decoder(self.original_file)
 
-        self.generated_fourier = myFourier(self.decoder_,self.sampleSize)
+        self.generate_from_file()
+    
+    def generate_from_file(self):
+        if not self.generated_fourier:
 
-        self.magnitude = self.generated_fourier.gen(self.hertz_bins)
-        if not self.logarithmic_scale:
-            self.magnitude * self.magnitude_scale
-        else:
-            self.magnitude * 1.5
+            self.generated_fourier = myFourier(self.decoder_,self.sampleSize)
 
-        self.maxTicking.changeTick(self.generated_fourier.max)
+            self.magnitude = self.generated_fourier.gen(self.hertz_bins)
+            if not self.logarithmic_scale:
+                self.magnitude * self.magnitude_scale
+            else:
+                self.magnitude
+
+            self.maxTicking.changeTick(self.generated_fourier.max)
+
     
     def init_music(self):
         self.music_lib.init()
@@ -189,10 +198,11 @@ class frequency_visualizer:
             self.volume = value
 
     def is_playing(self):
-        if self.music_init:
-            return self.music_lib.music.get_busy()
+        if self.music_lib.get_init():
+            return self.music_lib.music.get_busy()    
+        self.music_init = False
         return False
-
+    
     def update_music_bool(self,nBool):
         self.music_running = nBool
         if nBool:
@@ -205,9 +215,9 @@ class frequency_visualizer:
             self.select_file(0,0,self.ui_label_widgets.select)
 
         if self.music_init:
-            if not pgm.music.get_busy():
+            if not self.music_lib.music.get_busy():
                 self.update_music_bool(True)
-                pgm.music.play()           
+                self.music_lib.music.play()           
 
     def stop_music(self):
         if self.is_playing():
@@ -242,7 +252,7 @@ class frequency_visualizer:
         self.maxTicking = ticking()
 
         self.magnitude = 0
-        self.magnitude_scale = 0.6
+        self.magnitude_scale = 0.7
         self.logarithmic_scale = False
 
         self.scale_to_volume = True
@@ -275,7 +285,10 @@ class frequency_visualizer:
 
         self.sync = True
 
+        self.info_panel_bool = False
         self.info_panel_tags = {}
+
+        self.dim_amount = 0.9
 
         self.tick = 0
     
@@ -283,18 +296,20 @@ class frequency_visualizer:
         dpg.configure_item(item_id,default_value=text)
     
     def update_info_panel(self,n_hz = None, n_samples = None,n_milis = None):
-        if not n_samples:
-            n_samples = self.sampleSize
-        else:
-            self.update_item_text(self.info_panel_tags["samples"],f"  {n_samples}"[:6])
+        if self.info_panel_bool:
+            if not n_samples:
+                n_samples = self.sampleSize
+            else:
+                self.update_item_text(self.info_panel_tags["samples"],f"  {n_samples}"[:6])
 
-        if n_hz:
-            self.update_item_text(self.info_panel_tags["hz"],f"{n_hz}"[:6])
+            if n_hz:
+                self.update_item_text(self.info_panel_tags["hz"],f"{n_hz}"[:6])
 
-        if n_milis:
-            self.update_item_text(self.info_panel_tags["ms"],f"  {n_milis*1000}"[0:6])
+            if n_milis:
+                self.update_item_text(self.info_panel_tags["ms"],f"  {n_milis*1000}"[0:6])
 
     def info_panel(self):
+        self.info_panel_bool = True
         x0 = int(self.window_w/10*6)
         x1 = int(self.window_w/10*7.4)
         y0 = 0
@@ -311,7 +326,7 @@ class frequency_visualizer:
     def init_gui(self):
         dpg.create_context()
         
-        with dpg.window(label="-",tag=self.main_win_tag) as main_win:
+        with dpg.window(label="-",tag=self.main_win_tag,no_background=True) as main_win:
             self.ui_label_widgets.select = dpg.add_text(form_string(self.filepath))
             dpg.add_button(label="Select",
                            user_data=self.ui_label_widgets.select,
@@ -327,10 +342,15 @@ class frequency_visualizer:
             slider_w = self.window_w/8
             dpg.add_slider_int(min_value=1,max_value=100,pos=(self.window_w/10*1,30),label="Volume",width=slider_w,default_value=self.volume,callback=self.set_music_vol,clamped=True,tracked=True)
 
-            self.ui_label_widgets.isPlaying = dpg.add_text("Not Playing",pos=(self.window_w/10*1,55))
+            leftmost = self.window_w/10*0.04
+            upmost = self.window_h/16*2.76
+            
+            dpg.draw_line(p1=(-leftmost,self.window_h/16*5),p2=(-leftmost,-40),color=[150,150,150],thickness=4)            
+            self.ui_label_widgets.isPlaying = dpg.add_text("Not Playing",pos=[leftmost+2,upmost],color=[255,255,255])
+            dpg.draw_rectangle((-leftmost*0.5,upmost*0.9),pmax=((leftmost*15,upmost*1.1)),color=[75,75,75])
 
 
-        self.info_panel()      
+        #self.info_panel()      
         
         self.canvas_panel()
 
@@ -378,7 +398,7 @@ class frequency_visualizer:
         self.stop_music()
         
         if self.music_init:
-            pgm.quit()
+            self.music_lib.quit()
     
     def music_pos_to_tick(self):
         return int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow)
@@ -392,11 +412,16 @@ class frequency_visualizer:
     def negative_color(color):
         return [255-color[0],255-color[1],255-color[2]]
     
+    @staticmethod
+    def dim_color(color,dim):
+        return [int(c*dim) for c in color]
+    
     def redraw(self,canvas,visu_size,margin):
         step = 1
-        fix = 1      
+        fix = 0      
         col_n = [87, 96, 150]
-        col_over = self.negative_color(col_n)
+        col_n_dim = self.dim_color(col_n,self.dim_amount)
+        col_over = [150,50,30]
         background_col = [0,0,0]
         text_col = (255,255,255)
         text_size = 15
@@ -442,7 +467,7 @@ class frequency_visualizer:
 
                         self.sync_tick_to_music(fix)
                         
-                        self.draw_bars_rect(canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over)         
+                        self.draw_bars_rect(canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over,col_n_dim)         
 
                     else:
                         self.tick = 0
@@ -450,7 +475,7 @@ class frequency_visualizer:
                     txt = txt_values[i]
                     tlen = len(txt)
 
-                    dpg.draw_text((rect_x0+(0.5-(0.1*tlen))*rect_size_w,rect_y0+6),text=txt,color=text_col,size=text_size,parent=canvas)
+                    dpg.draw_text((rect_x0+(0.5-(0.09*tlen))*rect_size_w,rect_y0+6),text=txt,color=text_col,size=text_size,parent=canvas)
                     rect_x0 += spacing
                     rect_x0 += rect_size_w
 
@@ -459,7 +484,7 @@ class frequency_visualizer:
                 dpg.draw_text((bg_size_w-margin,rect_y0+6),text="Hz",parent=canvas,color=text_col,size=text_size)
                 
                 if(self.generated_fourier):
-                    sleep = (self.generated_fourier.TWindow*float(step))
+                    sleep = (self.generated_fourier.TWindow*float(step))                    
                 else:
                     sleep = 1
                 time.sleep(sleep)
@@ -471,7 +496,7 @@ class frequency_visualizer:
             else:
                 time.sleep(0.5)
     
-    def draw_bars_rect(self,canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over):
+    def draw_bars_rect(self,canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over,col_n_dim):
 
         val = self.generated_fourier.hz_ranges[self.tick][i]* vol_prct
         maximum = self.magnitude
@@ -484,12 +509,15 @@ class frequency_visualizer:
         overFlow = 0
         if percentage > 1.0:
             overFlow = percentage-1.0
-            overFlow /= 2
             percentage = 1.0
         elif percentage < 0.02:
             percentage = 0.002
         
-        dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*percentage),fill=col_n,color=col_n,parent=canvas)
+        if overFlow > 0:
+            c = col_n_dim
+        else:
+            c = col_n       
+        dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*percentage),fill=c,color=c,parent=canvas)
         if overFlow > 0:
             dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*overFlow),fill=col_over,color=col_over,parent=canvas)
     
