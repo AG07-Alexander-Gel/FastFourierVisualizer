@@ -55,7 +55,7 @@ class ticking:
     def changeTick(self,val : int):
         self.maxTick = val
         
-class myFourier:
+class MyFourier:
 
     def __init__(self,decoder,samplesWindowSize=1024):
         def toMono(buf):
@@ -123,7 +123,7 @@ class myFourier:
     def printInfo(self):
         print(f"TimeWindow: {str(self.TWindow*1000)[0:5]}ms ; Bin Size: {self.binSize} Hz ; Bin Amount: {self.binAmount} ; MaxFrequencyToCheck: {self.MaxFreq} Hz")
 
-class frequency_visualizer:
+class FrequencyVisualizer:
 
     def debugging_(self):
         self.is_playing()
@@ -164,7 +164,7 @@ class frequency_visualizer:
     def generate_from_file(self):
         if not self.generated_fourier:
 
-            self.generated_fourier = myFourier(self.decoder_,self.sampleSize)
+            self.generated_fourier = MyFourier(self.decoder_,self.sampleSize)
 
             self.magnitude = self.generated_fourier.gen(self.hertz_bins)
             if not self.logarithmic_scale:
@@ -510,8 +510,8 @@ class frequency_visualizer:
         if percentage > 1.0:
             overFlow = percentage-1.0
             percentage = 1.0
-        elif percentage < 0.02:
-            percentage = 0.002
+        elif percentage < 0.005:
+            percentage = 0.005
         
         if overFlow > 0:
             c = col_n_dim
@@ -522,11 +522,11 @@ class frequency_visualizer:
             dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*overFlow),fill=col_over,color=col_over,parent=canvas)
     
     def sync_tick_to_music(self,fix):
-        if(self.tick %6 == 0 and self.sync):
+        if(self.tick %6 == 0 and self.sync and self.music_running):
             self.tick = 0
-            self.tick += int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow) + fix
+            self.tick += int(round(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow,0)) + fix
 
 
-freq = frequency_visualizer()
+freq = FrequencyVisualizer()
 freq.start()
 freq.stop()
