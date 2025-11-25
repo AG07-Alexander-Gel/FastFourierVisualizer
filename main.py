@@ -22,9 +22,10 @@ def form_string(txt: str):
     return new_txt[::-1].replace(".mp3","")
 
 class ui_button_tags(Enum):
-    RUN = 100
-    STOP = 101
-    SELECT = 102
+    RUN : int = 100
+    STOP : int = 101
+    SELECT : int = 102
+    CUSTOM_RANGE : int = 103
 
 class FINAL_hzText(Enum):
     Bass = "150"          #   (0          ,   281.25)
@@ -44,8 +45,7 @@ class FINAL_hzRanges(Enum):
     Presence = 6000.0
     Inbet = 13000.0
     Treble = 20015.625
-    HighP = 24000.0  
-
+    HighP = 24000.0
 
 class ticking:
 
@@ -165,7 +165,6 @@ class FrequencyVisualizer:
         if not self.generated_fourier:
 
             self.generated_fourier = MyFourier(self.decoder_,self.sampleSize)
-
             self.magnitude = self.generated_fourier.gen(self.hertz_bins)
             if not self.logarithmic_scale:
                 self.magnitude * self.magnitude_scale
@@ -173,8 +172,7 @@ class FrequencyVisualizer:
                 self.magnitude
 
             self.maxTicking.changeTick(self.generated_fourier.max)
-
-    
+     
     def init_music(self):
         self.music_lib.init()
         self.music_init = True
@@ -245,7 +243,9 @@ class FrequencyVisualizer:
 
         self.running = False
 
-        self.sampleSize = 4096
+        self.sampleSizeMin = 256
+        self.sampleSize = 2048
+        self.sampleSizeMax = 8192
 
         self.generated_fourier = None
         
@@ -257,9 +257,23 @@ class FrequencyVisualizer:
 
         self.scale_to_volume = True
         
+        self.bool_hertz_bins_custom = True
+        self.val_hertz_bins_custom = 250
+        self.default_hertz_bins = {}
+        self.custom_hertz_bins = {}
         self.hertz_bins = {}
+
         for member in FINAL_hzRanges:
-            self.hertz_bins[str(member.name)] = member.value
+            self.default_hertz_bins[str(member.name)] = member.value
+        
+        increment = int(24000/self.val_hertz_bins_custom)
+        for i in range(0,24000+increment,increment):
+            self.custom_hertz_bins[str(i)] = i
+        
+        if self.bool_hertz_bins_custom:
+            self.hertz_bins = self.custom_hertz_bins
+        else:
+            self.hertz_bins = self.default_hertz_bins
 
         self.screen_w = GetSystemMetrics(0)
         self.screen_h = GetSystemMetrics(1)
@@ -278,6 +292,7 @@ class FrequencyVisualizer:
         class _ui_label_widgets:
             select = None
             isPlaying = None
+            SampleInput = 201
 
         self.ui_label_widgets = _ui_label_widgets()
 
@@ -295,6 +310,9 @@ class FrequencyVisualizer:
     def update_item_text(self,item_id,text):
         dpg.configure_item(item_id,default_value=text)
     
+    def update_item_function(self,item_id,b):
+        dpg.configure_item(item_id,enabled=b)
+    
     def update_info_panel(self,n_hz = None, n_samples = None,n_milis = None):
         if self.info_panel_bool:
             if not n_samples:
@@ -307,6 +325,33 @@ class FrequencyVisualizer:
 
             if n_milis:
                 self.update_item_text(self.info_panel_tags["ms"],f"  {n_milis*1000}"[0:6])
+    
+    def sampleInput(self,sender, value, user_data):
+        if dpg.is_dearpygui_running():
+            newVal = 0
+            if self.sampleSize > value:
+                newVal = self.sampleSize/2
+            else:
+                newVal = self.sampleSize*2
+            newVal = max(min(int(newVal),self.sampleSizeMax),self.sampleSizeMin)
+            dpg.set_value(self.ui_label_widgets.SampleInput,newVal)
+            self.sampleSize = newVal
+    
+    @staticmethod
+    def cstmRangeString(val : bool) -> str:
+        return "Custom Ranges: " + ("On" if val else "Off")
+
+    def changeCustomRangeInput(self, sender, change = None):
+        if not self.music_init:
+            if not change:
+                self.bool_hertz_bins_custom = not self.bool_hertz_bins_custom
+            else:
+                self.bool_hertz_bins_custom = change
+
+            self.hertz_bins = self.custom_hertz_bins if self.bool_hertz_bins_custom else self.default_hertz_bins
+                
+            if dpg.is_dearpygui_running():
+                dpg.set_item_label(ui_button_tags.CUSTOM_RANGE.value,self.cstmRangeString(self.bool_hertz_bins_custom))            
 
     def info_panel(self):
         self.info_panel_bool = True
@@ -339,8 +384,13 @@ class FrequencyVisualizer:
             dpg.add_button(label="Stop",tag=ui_button_tags.STOP.value,
                         callback=self.stop_music)
             
+            dpg.add_input_int(label="Size",tag=self.ui_label_widgets.SampleInput,default_value=self.sampleSize,width=self.window_h/9,min_value=self.sampleSizeMin,max_value=self.sampleSizeMax,callback=self.sampleInput)
+
+            
+            dpg.add_button(label=self.cstmRangeString(self.bool_hertz_bins_custom),tag=ui_button_tags.CUSTOM_RANGE.value,callback=self.changeCustomRangeInput)
+            
             slider_w = self.window_w/8
-            dpg.add_slider_int(min_value=1,max_value=100,pos=(self.window_w/10*1,30),label="Volume",width=slider_w,default_value=self.volume,callback=self.set_music_vol,clamped=True,tracked=True)
+            dpg.add_slider_int(min_value=1,max_value=100,pos=(self.window_w/10*1,30),label="Volume",width=slider_w,default_value=self.volume,callback=self.set_music_vol,clamped=True,tracked=True,user_data=self.sampleSize)
 
             leftmost = self.window_w/10*0.04
             upmost = self.window_h/16*2.76
@@ -428,26 +478,44 @@ class FrequencyVisualizer:
         ratio_spacing = 0.25
         y_margin = 0.09
         dist_to_line = 0.5
-
-        txt_values = [v.value for v in FINAL_hzText]
-
+        
         bg_size_w = visu_size[0]-margin
-        bg_size_h = visu_size[1]-margin*1.75  
+        bg_size_h = visu_size[1]-margin*1.75
 
-        amount = len(self.hertz_bins.keys())
-
-        o_width = (bg_size_w-margin)/amount
-        
-        rect_size_w = o_width*ratio_spacing
-        spacing = o_width * (1-ratio_spacing)
-        
         rect_y0 = bg_size_h*(1-y_margin)
         y_max = rect_y0-(bg_size_h*y_margin)
         
         vol_prct = 1.0
 
+        #update when bool changes for custom range
+        loop_custom_ranges = not self.bool_hertz_bins_custom
+        amount = 0
+        txt_values = []
+        o_width = 0
+        rect_size_w = 0
+        spacing = 0
+
         while self.running:
+        
+            #poll custom range
+            if loop_custom_ranges != self.bool_hertz_bins_custom:
+                loop_custom_ranges = self.bool_hertz_bins_custom
+
+                
+                if not loop_custom_ranges:
+                    txt_values = [v.value for v in FINAL_hzText]
+                else:
+                    txt_values = ["" for h in self.custom_hertz_bins]
+
+            
+                amount = len(self.hertz_bins.keys())
+
+                o_width = (bg_size_w-margin*2)/amount        
+                rect_size_w = o_width*ratio_spacing
+                spacing = o_width * (1-ratio_spacing)
+
             if dpg.is_dearpygui_running():
+
 
                 rect_x0 = 0+margin*2.5
 
@@ -467,7 +535,7 @@ class FrequencyVisualizer:
 
                         self.sync_tick_to_music(fix)
                         
-                        self.draw_bars_rect(canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over,col_n_dim)         
+                        self.draw_bars_rect(canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over,col_n_dim,margin,bg_size_w)        
 
                     else:
                         self.tick = 0
@@ -496,7 +564,7 @@ class FrequencyVisualizer:
             else:
                 time.sleep(0.5)
     
-    def draw_bars_rect(self,canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over,col_n_dim):
+    def draw_bars_rect(self,canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over,col_n_dim,margin,bg_size_w):
 
         val = self.generated_fourier.hz_ranges[self.tick][i]* vol_prct
         maximum = self.magnitude
@@ -516,16 +584,16 @@ class FrequencyVisualizer:
         if overFlow > 0:
             c = col_n_dim
         else:
-            c = col_n       
-        dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*percentage),fill=c,color=c,parent=canvas)
-        if overFlow > 0:
-            dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*overFlow),fill=col_over,color=col_over,parent=canvas)
+            c = col_n
+        if rect_x0 <= bg_size_w-margin:      
+            dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*percentage),fill=c,color=c,parent=canvas)
+            if overFlow > 0:
+                dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*overFlow),fill=col_over,color=col_over,parent=canvas)
     
     def sync_tick_to_music(self,fix):
         if(self.tick %6 == 0 and self.sync and self.music_running):
             self.tick = 0
             self.tick += int(round(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow,0)) + fix
-
 
 freq = FrequencyVisualizer()
 freq.start()
