@@ -46,14 +46,6 @@ class FINAL_hzRanges(Enum):
     Inbet = 13000.0
     Treble = 20015.625
     HighP = 24000.0
-
-class ticking:
-
-    def __init__(self):
-        self.maxTick = 1000000000
-
-    def changeTick(self,val : int):
-        self.maxTick = val
         
 class MyFourier:
 
@@ -105,16 +97,17 @@ class MyFourier:
         return np.max(self.hz_ranges)
         
 
-    def gen(self, order : dict):
-        while self.current < self.max:
-            values = self.mono_pcm[(self.current*self.samplesSize) : ((self.current+1)*self.samplesSize)]
-            hamming = np.hamming(self.samplesSize)
-            valuesToWindow = values * hamming
+    def gen(self, order : dict,change_ranges : bool = False):
+        if not change_ranges:
+            while self.current < self.max:
+                values = self.mono_pcm[(self.current*self.samplesSize) : ((self.current+1)*self.samplesSize)]
+                hamming = np.hamming(self.samplesSize)
+                valuesToWindow = values * hamming
 
-            spectral_values = np.fft.fft(valuesToWindow)
-        
-            self.bin_values[self.current] = abs(spectral_values[:self.neoquist])
-            self.current += 1
+                spectral_values = np.fft.fft(valuesToWindow)
+            
+                self.bin_values[self.current] = abs(spectral_values[:self.neoquist])
+                self.current += 1
         
         self.hz_ranges = np.zeros((self.max,len(order.keys())),dtype=np.uint32)       
         return self.gen_hz_ranges(order=order)
@@ -128,20 +121,28 @@ class FrequencyVisualizer:
     def debugging_(self):
         self.is_playing()
 
-    def select_file(self, sender, value, user_data):
-        new_file = filedialog.askopenfilename(title="Select mp3")
-        if ".mp3" in new_file:            
-            self.file_selected = True
+    def select_file(self, sender, value, user_data,pre_set_file = None, change_ranges : bool = False):
+        if not self.loading_fourier:
+            if not pre_set_file:
+                new_file = filedialog.askopenfilename(title="Select mp3")
+            else:
+                new_file = pre_set_file
+            if ".mp3" in new_file:        
+                self.file_selected = True
 
-            dpg.set_value(user_data,"Loading...")
+                self.update_item_text(self.ui_label_widgets.selected,"Loading...")
 
-            self.update_file(new_file)
+                self.loading_fourier = True
 
-            dpg.set_value(user_data,form_string(self.filepath))
+                self.update_file(new_file,change_ranges)
 
-            self.update_info_panel(n_hz=self.generated_fourier.binSize,n_milis=self.generated_fourier.TWindow)
+                self.update_item_text(self.ui_label_widgets.selected,form_string(new_file))
 
-    def update_file(self,new_file_path):
+                self.loading_fourier = False
+
+                self.update_info_panel(n_hz=self.generated_fourier.binSize,n_milis=self.generated_fourier.TWindow)
+
+    def update_file(self,new_file_path, change_ranges : bool = False):
         self.filepath = new_file_path
         self.original_file = open(self.filepath,'rb')
 
@@ -150,28 +151,26 @@ class FrequencyVisualizer:
             self.load_music()
         else:
             self.init_music()
-            self.load_music()        
-        
-        if self.generated_fourier:
-            del self.generated_fourier
-            print(f"GC: {gc.collect()}")
-            self.generated_fourier = None
-        
-        self.decoder_ = mp3.Decoder(self.original_file)
+            self.load_music()
 
-        self.generate_from_file()
+        if not change_ranges:
+            if self.generated_fourier:
+                del self.generated_fourier
+                print(f"GC: {gc.collect()}")
+                self.generated_fourier = None
+            
+            self.decoder_ = mp3.Decoder(self.original_file)
+
+        self.generate_from_file(change_ranges=change_ranges)
     
-    def generate_from_file(self):
+    def generate_from_file(self, change_ranges : bool = False):
         if not self.generated_fourier:
-
             self.generated_fourier = MyFourier(self.decoder_,self.sampleSize)
-            self.magnitude = self.generated_fourier.gen(self.hertz_bins)
-            if not self.logarithmic_scale:
-                self.magnitude * self.magnitude_scale
-            else:
-                self.magnitude
+        self.magnitude = self.generated_fourier.gen(self.hertz_bins,change_ranges=change_ranges)
+        
+        self.magnitude * self.magnitude_scale
 
-            self.maxTicking.changeTick(self.generated_fourier.max)
+        self.song_length = self.generated_fourier.max
      
     def init_music(self):
         self.music_lib.init()
@@ -210,7 +209,7 @@ class FrequencyVisualizer:
         
     def run_music(self):
         if not self.music_init:
-            self.select_file(0,0,self.ui_label_widgets.select)
+            self.select_file(0,0,None,None)
 
         if self.music_init:
             if not self.music_lib.music.get_busy():
@@ -229,6 +228,8 @@ class FrequencyVisualizer:
     def get_music_pos_ms(self):
         if self.is_playing():
             return self.music_lib.music.get_pos()
+        else:
+            return self.song_length
 
     def __init__(self):
         self.music_init = False
@@ -237,6 +238,7 @@ class FrequencyVisualizer:
         self.volume = 75
 
         self.file_selected = False
+        self.loading_fourier = False
         self.filepath = "Not Selected"
         self.original_file = None
         self.decoder_ = None
@@ -249,16 +251,18 @@ class FrequencyVisualizer:
 
         self.generated_fourier = None
         
-        self.maxTicking = ticking()
+        self.song_length = 1000000000
 
+        self.abs_minimum = 0.005
         self.magnitude = 0
         self.magnitude_scale = 0.7
-        self.logarithmic_scale = False
+        self.logarithmic_scale = True
+        self.root_scale = 0.65
 
         self.scale_to_volume = True
         
-        self.bool_hertz_bins_custom = True
-        self.val_hertz_bins_custom = 250
+        self.bool_hertz_bins_custom = False
+        self.val_hertz_bins_custom = 125
         self.default_hertz_bins = {}
         self.custom_hertz_bins = {}
         self.hertz_bins = {}
@@ -290,7 +294,7 @@ class FrequencyVisualizer:
         self.info_panel_win_tag = 3
 
         class _ui_label_widgets:
-            select = None
+            selected = None
             isPlaying = None
             SampleInput = 201
 
@@ -342,13 +346,15 @@ class FrequencyVisualizer:
         return "Custom Ranges: " + ("On" if val else "Off")
 
     def changeCustomRangeInput(self, sender, change = None):
-        if not self.music_init:
+        if not self.music_running:
             if not change:
                 self.bool_hertz_bins_custom = not self.bool_hertz_bins_custom
             else:
                 self.bool_hertz_bins_custom = change
 
             self.hertz_bins = self.custom_hertz_bins if self.bool_hertz_bins_custom else self.default_hertz_bins
+            
+            self.select_file(0,0,None,self.filepath,change_ranges=True)
                 
             if dpg.is_dearpygui_running():
                 dpg.set_item_label(ui_button_tags.CUSTOM_RANGE.value,self.cstmRangeString(self.bool_hertz_bins_custom))            
@@ -372,9 +378,9 @@ class FrequencyVisualizer:
         dpg.create_context()
         
         with dpg.window(label="-",tag=self.main_win_tag,no_background=True) as main_win:
-            self.ui_label_widgets.select = dpg.add_text(form_string(self.filepath))
+            self.ui_label_widgets.selected = dpg.add_text(form_string(self.filepath))
+
             dpg.add_button(label="Select",
-                           user_data=self.ui_label_widgets.select,
                            tag=ui_button_tags.SELECT.value,
                         callback=self.select_file)
             
@@ -454,9 +460,13 @@ class FrequencyVisualizer:
         return int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow)
 
     @staticmethod
-    def logarithmic(val,max):
+    def logarithmic(val,max_val,root_sc):
         correction = 0.00000001
-        return math.log(val+correction)/math.log(max+correction)
+        idk = True
+        even = 0.25
+        if idk:
+            return (val**root_sc)/(max_val**root_sc)-even
+        return math.log(val+correction)/math.log(max_val+correction)
 
     @staticmethod
     def negative_color(color):
@@ -524,16 +534,19 @@ class FrequencyVisualizer:
                 dpg.draw_rectangle((0,0),(bg_size_w,bg_size_h),fill=background_col,color=background_col,parent=canvas)
 
                 #Change and update behaviour when self.tick reaches end
-                if self.tick >= self.maxTicking.maxTick:
+                
+                
+                self.sync_tick_to_music(fix)
+
+                if self.tick >= self.song_length:
                     self.tick = 0
+                    print("done")
                     if self.music_running:
                         self.update_music_bool(False)
 
                 for i in range(0,amount):
 
                     if self.music_running and self.generated_fourier:
-
-                        self.sync_tick_to_music(fix)
                         
                         self.draw_bars_rect(canvas,i,vol_prct,rect_x0,rect_y0,rect_size_w,y_max,dist_to_line,col_n,col_over,col_n_dim,margin,bg_size_w)        
 
@@ -572,20 +585,20 @@ class FrequencyVisualizer:
         if not self.logarithmic_scale:
             percentage = val/maximum
         else:
-            percentage = self.logarithmic(val,maximum)
+            percentage = self.logarithmic(val,maximum,self.root_scale)
 
         overFlow = 0
         if percentage > 1.0:
             overFlow = percentage-1.0
             percentage = 1.0
-        elif percentage < 0.005:
-            percentage = 0.005
+        elif percentage < self.abs_minimum:
+            percentage = self.abs_minimum
         
         if overFlow > 0:
             c = col_n_dim
         else:
             c = col_n
-        if rect_x0 <= bg_size_w-margin:      
+        if rect_x0 <= bg_size_w-margin*2:      
             dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*percentage),fill=c,color=c,parent=canvas)
             if overFlow > 0:
                 dpg.draw_rectangle((rect_x0,rect_y0),(rect_x0+rect_size_w,rect_y0-(y_max-dist_to_line)*overFlow),fill=col_over,color=col_over,parent=canvas)
