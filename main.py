@@ -262,7 +262,7 @@ class FrequencyVisualizer:
         self.scale_to_volume = True
         
         self.bool_hertz_bins_custom = False
-        self.val_hertz_bins_custom = 125
+        self.val_hertz_bins_custom = 75
         self.default_hertz_bins = {}
         self.custom_hertz_bins = {}
         self.hertz_bins = {}
@@ -460,12 +460,28 @@ class FrequencyVisualizer:
         return int(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow)
 
     @staticmethod
-    def logarithmic(val,max_val,root_sc):
+    def alt_rendering(val,max_val,root_sc, bl : bool = False):
         correction = 0.00000001
         idk = True
-        even = 0.25
+
+        
+        if bl:
+            even = 0.15
+        else:
+            even = 0.0
+            root_sc *= 1.2
+
+        
+        if val <= max_val*0.3:
+            mult = 1.2
+        elif val > max_val*0.85:
+            mult = 0.8
+        else:
+            mult = 1
+
+        
         if idk:
-            return (val**root_sc)/(max_val**root_sc)-even
+            return (val**root_sc)*mult/(max_val**root_sc)-even
         return math.log(val+correction)/math.log(max_val+correction)
 
     @staticmethod
@@ -585,7 +601,7 @@ class FrequencyVisualizer:
         if not self.logarithmic_scale:
             percentage = val/maximum
         else:
-            percentage = self.logarithmic(val,maximum,self.root_scale)
+            percentage = self.alt_rendering(val,maximum,self.root_scale,self.bool_hertz_bins_custom)
 
         overFlow = 0
         if percentage > 1.0:
