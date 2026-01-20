@@ -245,7 +245,7 @@ class FrequencyVisualizer:
         self.running = False
 
         self.sampleSizeMin = 256
-        self.sampleSize = 2048
+        self.sampleSize = 1024
         self.sampleSizeMax = 8192
 
         self.generated_fourier = None
