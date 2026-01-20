@@ -101,8 +101,7 @@ class MyFourier:
         if not change_ranges:
             while self.current < self.max:
                 values = self.mono_pcm[(self.current*self.samplesSize) : ((self.current+1)*self.samplesSize)]
-                hamming = np.hamming(self.samplesSize)
-                valuesToWindow = values * hamming
+                valuesToWindow = values * np.hamming(self.samplesSize)
 
                 spectral_values = np.fft.fft(valuesToWindow)
             
@@ -155,7 +154,7 @@ class FrequencyVisualizer:
 
         if not change_ranges:
             if self.generated_fourier:
-                del self.generated_fourier
+                self.generated_fourier = None
                 print(f"GC: {gc.collect()}")
                 self.generated_fourier = None
             
@@ -259,10 +258,10 @@ class FrequencyVisualizer:
         self.bool_alternative_rendering = True
         self.root_scale = 0.65
 
-        self.scale_to_volume = False
+        self.scale_to_volume = True
         
         self.bool_hertz_bins_custom = False
-        self.val_hertz_bins_custom = 35
+        self.val_hertz_bins_custom = 100
         self.default_hertz_bins = {}
         self.custom_hertz_bins = {}
         self.hertz_bins = {}
@@ -527,9 +526,10 @@ class FrequencyVisualizer:
         o_width = 0
         rect_size_w = 0
         spacing = 0
+        
+        reduce_amount = 0.65
 
         self.draw_background(canvas=canvas,bg_w=bg_size_w,bg_h=bg_size_h,bg_col=background_col,margin=margin,text_col=text_col,text_size=text_size,yFix=y_margin,rectMax=rect_y0,yMax=y_max)
-
 
         while self.running:
         
@@ -543,8 +543,10 @@ class FrequencyVisualizer:
                 else:
                     txt_values = ["" for h in self.custom_hertz_bins]
 
-            
                 amount = len(self.hertz_bins.keys())
+
+                if self.bool_hertz_bins_custom:
+                    amount = int(amount*reduce_amount)
 
                 o_width = (bg_size_w-margin*4.5)/amount        
                 rect_size_w = o_width*ratio_spacing
@@ -639,9 +641,8 @@ class FrequencyVisualizer:
         dpg.draw_text((bg_w-margin,rectMax+6),text="Hz",parent=canvas,color=text_col,size=text_size)
     
     def sync_tick_to_music(self,fix):
-        if(self.tick %6 == 0 and self.sync and self.music_running):            
-            self.tick = 0
-            self.tick += int(round(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow,0)) + fix
+        if(self.tick %6 == 0 and self.sync and self.music_running and self.tick < self.song_length):
+            self.tick = int(round(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow,0)) + fix
 
 freq = FrequencyVisualizer()
 freq.start()
