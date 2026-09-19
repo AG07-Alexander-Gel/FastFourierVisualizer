@@ -22,8 +22,6 @@ def form_string(txt: str):
 
     return new_txt[::-1].replace(".mp3","")
 
-
-
 class FINAL_hzText(Enum):
     Bass = "150"          #   (0          ,   281.25)
     Low = "450"           #   (328.125    ,   515.625)

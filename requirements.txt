@@ -1,0 +1,5 @@
+dearpygui==2.3.1
+numpy==2.5.3
+pygame==2.6.1
+pymp3==0.2.0
+pywin32==308

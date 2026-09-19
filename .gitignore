@@ -2,3 +2,6 @@
 decoding-test.py
 *.png
 testWidth.py
+/build/
+/dist/
+*.spec
