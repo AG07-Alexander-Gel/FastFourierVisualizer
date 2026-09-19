@@ -11,6 +11,7 @@ import gc
 import time
 import threading
 
+
 def form_string(txt: str):
     new_txt = ""
     for c in txt[::-1]:
@@ -21,11 +22,7 @@ def form_string(txt: str):
 
     return new_txt[::-1].replace(".mp3","")
 
-class ui_button_tags(Enum):
-    RUN : int = 100
-    STOP : int = 101
-    SELECT : int = 102
-    CUSTOM_RANGE : int = 103
+
 
 class FINAL_hzText(Enum):
     Bass = "150"          #   (0          ,   281.25)
@@ -296,16 +293,23 @@ class FrequencyVisualizer:
 
         self.visu_pos = 0.2
 
-        self.main_win_tag = 1
-        self.visualizer_win_tag = 2
-        self.info_panel_win_tag = 3
+        self.main_win_tag = 11111
+        self.visualizer_win_tag = 22222
+        self.info_panel_win_tag = 33333
 
         class _ui_label_widgets:
             selected = None
             isPlaying = None
-            SampleInput = 201
+            SampleInput = None
+        
+        class _ui_button_tags:
+            RUN : int = None
+            STOP : int = None
+            SELECT : int = None
+            CUSTOM_RANGE : int = None
 
         self.ui_label_widgets = _ui_label_widgets()
+        self.ui_button_tags = _ui_button_tags()
 
         self.redraw_thread = None
 
@@ -363,7 +367,7 @@ class FrequencyVisualizer:
             self.select_file(0,0,None,self.filepath,change_ranges=True)
                 
             if dpg.is_dearpygui_running():
-                dpg.set_item_label(ui_button_tags.CUSTOM_RANGE.value,self.cstmRangeString(self.bool_hertz_bins_custom))            
+                dpg.set_item_label(self.ui_button_tags.CUSTOM_RANGE,self.cstmRangeString(self.bool_hertz_bins_custom))            
 
     def info_panel(self):
         self.info_panel_bool = True
@@ -379,27 +383,37 @@ class FrequencyVisualizer:
         self.info_panel_tags["samples"] = dpg.add_text(f"  {self.sampleSize}",label="Samples",show_label=True,parent=info_panel)
         self.info_panel_tags["hz"] = dpg.add_text("00.000",label="Hz/Bin",show_label=True,parent=info_panel)
         self.info_panel_tags["ms"] = dpg.add_text("   0.0",label="ms",show_label=True,parent=info_panel)
-        
+    
+    def init_uuids(self):
+        self.ui_label_widgets.SampleInput = dpg.generate_uuid()
+
+        self.ui_button_tags.CUSTOM_RANGE = dpg.generate_uuid()
+        self.ui_button_tags.RUN = dpg.generate_uuid()
+        self.ui_button_tags.SELECT = dpg.generate_uuid()
+        self.ui_button_tags.STOP = dpg.generate_uuid()
+
     def init_gui(self):
         dpg.create_context()
+
+        self.init_uuids()
         
         with dpg.window(label="-",tag=self.main_win_tag,no_background=True) as main_win:
             self.ui_label_widgets.selected = dpg.add_text(form_string(self.filepath))
-
+            
             dpg.add_button(label="Select",
-                           tag=ui_button_tags.SELECT.value,
+                           tag=self.ui_button_tags.SELECT,
                         callback=self.select_file)
             
-            dpg.add_button(label="Play",tag=ui_button_tags.RUN.value,
+            dpg.add_button(label="Play",tag=self.ui_button_tags.RUN,
                         callback=self.run_music)
 
-            dpg.add_button(label="Stop",tag=ui_button_tags.STOP.value,
+            dpg.add_button(label="Stop",tag=self.ui_button_tags.STOP,
                         callback=self.stop_music)
             
             dpg.add_input_int(label="Size",tag=self.ui_label_widgets.SampleInput,default_value=self.sampleSize,width=self.window_h/9,min_value=self.sampleSizeMin,max_value=self.sampleSizeMax,callback=self.sampleInput)
 
             
-            dpg.add_button(label=self.cstmRangeString(self.bool_hertz_bins_custom),tag=ui_button_tags.CUSTOM_RANGE.value,callback=self.changeCustomRangeInput)
+            dpg.add_button(label=self.cstmRangeString(self.bool_hertz_bins_custom),tag=self.ui_button_tags.CUSTOM_RANGE,callback=self.changeCustomRangeInput)
             
             slider_w = self.window_w/8
             dpg.add_slider_int(min_value=1,max_value=100,pos=(self.window_w/10*1,30),label="Volume",width=slider_w,default_value=self.volume,callback=self.set_music_vol,clamped=True,tracked=True,user_data=self.sampleSize)
@@ -440,6 +454,8 @@ class FrequencyVisualizer:
         dpg.start_dearpygui()
     
     def start(self):
+        
+        
         self.init_gui()
 
         self.running = True
@@ -641,7 +657,7 @@ class FrequencyVisualizer:
         dpg.draw_text((bg_w-margin,rectMax+6),text="Hz",parent=canvas,color=text_col,size=text_size)
     
     def sync_tick_to_music(self,fix):
-        if(self.tick %6 == 0 and self.sync and self.music_running and self.tick < self.song_length):
+        if(self.tick %6 == 0 and self.sync and self.music_running and self.tick < (self.song_length-6)):
             self.tick = int(round(self.get_music_pos_ms()/1000/self.generated_fourier.TWindow,0)) + fix
 
 freq = FrequencyVisualizer()
